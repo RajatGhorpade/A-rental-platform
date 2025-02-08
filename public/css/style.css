@@ -124,3 +124,8 @@ body
     padding-left: 0;
     padding-right: 0;
 }
+.review-card
+{
+    border: 1px solid black;
+    border-radius: 5px;
+}
