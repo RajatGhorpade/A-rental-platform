@@ -1,15 +1,22 @@
 const express=require('express');
 const app =express();
 const mongoose=require('mongoose');
-const Listing=require('./models/listing');
+//const Listing=require('./models/listing');
 const path = require('path');
 const methodOverride= require('method-override');
 const ejsMate=require('ejs-mate');
-const wrapAsync=require('./utils/wrapAsync');
+//const wrapAsync=require('./utils/wrapAsync');
 const ExpressError=require('./utils/ExpressError');
-const{listingSchema}=require('./schema');
-const Review=require('./models/review');
-const {reviewSchema}=require('./schema');
+//const{listingSchema}=require('./schema');
+//const Review=require('./models/review');
+//const {reviewSchema}=require('./schema');
+const session=require('express-session');
+const flash=require('connect-flash');
+
+//*Restructuring routes
+const listings=require('./routes/listing');
+const reviews=require('./routes/review');
+const { secureHeapUsed, createSecretKey } = require('crypto');
 
 //*ejs
 app.set('view engine','ejs');
@@ -37,11 +44,6 @@ async function main()
 };
 
 
-app.get('/',(req,res)=>
-{
-    res.send('Welcome to the project!!');
-});
-
 //*A sample data element to check working
 /*app.get('/testListing',async (req,res)=>
 {
@@ -58,155 +60,41 @@ app.get('/',(req,res)=>
    res.send('successful testing');
 });*/
 
-//!validations for schema in form of middleware
-const validateListing=(req,res,next)=>
+//*Session
+const sessionOptions=
 {
-    let {error}=listingSchema.validate(req.body);
-   
-    if(error)
+    secret:'mysupersecretcode',
+    resave:false,
+    saveUninitialized:true,
+    cookie:
     {
-        let errMsg=error.details.map((el)=>el.message).join(',');
-        //throw new ExpressError(400,error);
-        throw new ExpressError(400,errMsg);
-    }
-    else{
-        next();
-    }
+        expires:Date.now() + 7*24*60*60*1000, //setting expiry date of 7days
+        maxAge:7*24*60*60*1000,
+        httpOnly:true,
+    },
 };
 
-//!validations of serverside for Reviews
-const validateReview=(req,res,next)=>
+app.get('/',(req,res)=>
     {
-        let {error}=reviewSchema.validate(req.body);
-       
-        if(error)
-        {
-            let errMsg=error.details.map((el)=>el.message).join(',');
-            //throw new ExpressError(400,error);
-            throw new ExpressError(400,errMsg);
-        }
-        else{
-            next();
-        }
-    };
-    
-
-//!Index route
-app.get('/listings',wrapAsync(async(req,res)=>
-{
-      const allListings= await Listing.find({});
-      res.render('listings/index.ejs',{allListings});      
-})
-);
-
-//!Create new listing
-app.get('/listings/new' ,(req,res)=>
-    {
-        res.render('listings/new.ejs');
+        res.send('Welcome to the project!!');
     });
+
     
+app.use(session(sessionOptions));
+app.use(flash());//*Flash
 
-//!Show Route
-app.get('/listings/:id',wrapAsync(async(req,res)=>
-{
-    let {id}=req.params;
-    const listing=await Listing.findById(id).populate('review');
-    res.render('listings/show.ejs',{listing});
-})
-);
+app.use((req,res,next)=>{
+    res.locals.success=req.flash('success');
+    res.locals.error=req.flash('error');
+    //console.log(res.locals.success);
+    next();
+});
 
-//!Create route after creating new listing
-app.post('/listings',validateListing, wrapAsync(async(req,res,next)=>
-{
-        /*if(!req.body.listing)
-        {
-            throw new ExpressError(400,'Send valid data for listing');   
-        }*/
-       //let{title,description,image,price,country,location}=req.params;
-        //?Schema validation instead of below multiple if statements
-        /*let result=listingSchema.validate(req.body);
-        console.log(result);
-        if(result.error)
-        {
-            throw new ExpressError(400,result.error);
-        }*/
+//! lisitng routes
+app.use('/listings',listings);
 
-        const newListing= new Listing(req.body.listing);
-        //?handling errors if anyone paramter is missing
-        /*if(!newListing.title)
-        {
-            throw new ExpressError(400,'Title is missing!');
-        }
-        if(!newListing.description)
-        {
-            throw new ExpressError(400,'Description is missing!');
-        }
-        if(!newListing.location)
-        {
-            throw new ExpressError(400,'Location is missing!');
-        }*/
-        //?saving data in the database
-        await newListing.save();
-        res.redirect('/listings');
-        //console.log(listing);   
-       
-})
-);
-
-//!Edit Route
-app.get('/listings/:id/edit',wrapAsync(async(req,res)=>
-{
-    let {id}=req.params;
-    const listing=await Listing.findById(id);
-    res.render('listings/edit.ejs',{listing});
-})
-);
-
-//!update route
-app.put('/listings/:id',validateListing,wrapAsync(async(req,res)=>
-{
-    let{id}=req.params;
-    await Listing.findByIdAndUpdate(id,{...req.body.listing});
-    res.redirect('/listings');
-})
-);
-
-//! Delete Route
-app.delete('/listings/:id',wrapAsync(async(req,res)=>
-{
-    let {id}=req.params;
-    let deleteListing=await Listing.findByIdAndDelete(id);
-    console.log(deleteListing);
-    res.redirect('/listings');
-})
-);
-
-//!Submitting the reviews
-app.post('/listings/:id/reviews',validateReview,wrapAsync(async(req,res)=>
-{
-     let listing=await Listing.findById(req.params.id);
-     let newReview=new Review(req.body.review);
-
-     listing.review.push(newReview);
-
-     await newReview.save();
-     await listing.save();
-
-     console.log('new review saved');
-     res.redirect(`/listings/${listing._id}`);
-})
-);
-
-//!Delete the reviews
-app.delete('/listings/:id/reviews/:reviewId',wrapAsync(async(req,res)=>
-{
-    let{id,reviewId}=req.params;
-    
-    await Review.findByIdAndDelete(reviewId);
-    await Listing.findByIdAndUpdate(id,{$pull:{review:reviewId}});
-    res.redirect(`/listings/${id}`);
-})
-);
+//!reviews routes
+app.use('/listings/:id/reviews',reviews);
 
 //!Error middleware
 app.all('*',(req,res,next)=>
