@@ -12,11 +12,15 @@ const ExpressError=require('./utils/ExpressError');
 //const {reviewSchema}=require('./schema');
 const session=require('express-session');
 const flash=require('connect-flash');
+const passport=require('passport');
+const LocalStrategy=require('passport-local');
+const User=require('./models/user');
+
 
 //*Restructuring routes
-const listings=require('./routes/listing');
-const reviews=require('./routes/review');
-const { secureHeapUsed, createSecretKey } = require('crypto');
+const listingRouter=require('./routes/listing');
+const reviewRouter=require('./routes/review');
+const userRouter=require('./routes/user');
 
 //*ejs
 app.set('view engine','ejs');
@@ -83,6 +87,14 @@ app.get('/',(req,res)=>
 app.use(session(sessionOptions));
 app.use(flash());//*Flash
 
+//*passport
+app.use(passport.initialize());
+app.use(passport.session());
+passport.use(new LocalStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+//*using flash
 app.use((req,res,next)=>{
     res.locals.success=req.flash('success');
     res.locals.error=req.flash('error');
@@ -90,11 +102,25 @@ app.use((req,res,next)=>{
     next();
 });
 
-//! lisitng routes
-app.use('/listings',listings);
+//* demo user and route for authentication
+/*app.get('/demouser',async(req,res)=>
+{
+    let fakeUser=new User
+    ({
+        email:'student@gmail.com',
+        username:'student',
+    });
+    let registeredUser = await User.register(fakeUser,'password');
+    res.send(registeredUser);
+});*/
 
+
+//! lisitng routes
+app.use('/listings',listingRouter);
 //!reviews routes
-app.use('/listings/:id/reviews',reviews);
+app.use('/listings/:id/reviews',reviewRouter);
+//!user routes
+app.use('/',userRouter);
 
 //!Error middleware
 app.all('*',(req,res,next)=>
