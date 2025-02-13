@@ -16,6 +16,12 @@ const passport=require('passport');
 const LocalStrategy=require('passport-local');
 const User=require('./models/user');
 
+//*enviroment varaibles
+if(process.env.NODE_ENV!=='production')
+{
+    require('dotenv').config();
+}
+
 
 //*Restructuring routes
 const listingRouter=require('./routes/listing');
@@ -78,10 +84,10 @@ const sessionOptions=
     },
 };
 
-app.get('/',(req,res)=>
+/*app.get('/',(req,res)=>
     {
         res.send('Welcome to the project!!');
-    });
+    });*/
 
     
 app.use(session(sessionOptions));
